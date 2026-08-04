@@ -30,7 +30,7 @@ import (
 	"kubevirt.io/containerized-data-importer/pkg/util"
 )
 
-var qemuOperations = image.NewQEMUOperations()
+var qemuOperations = image.NewQEMUOperations(image.NewCmdRunner())
 
 // ProcessingPhase is the current phase being processed.
 type ProcessingPhase string
