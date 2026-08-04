@@ -142,8 +142,8 @@ const backingFileValidateJSON = `
 }
 `
 
-type runCmdFunc func(context.Context, string, ...string) ([]byte, error)
-type runCmdWithStreamFunc func(context.Context, func(string), string, ...string) error
+type runCmdFunc = RunFunc
+type runCmdWithStreamFunc = StreamFunc
 
 func init() {
 	ownerUID = "1111-1111-111"
@@ -634,13 +634,13 @@ func mockRunCmdWithStreamingStrict(errString string, checkArgs ...string) runCmd
 }
 
 func newTestOpsWithRun(run runCmdFunc) *qemuOperations {
-	cmd := newQemuCmd()
+	cmd := &qemuCmd{run: defaultRun, stream: defaultRunWithStream}
 	cmd.run = run
 	return &qemuOperations{cmd: cmd}
 }
 
 func newTestOpsWithStream(stream runCmdWithStreamFunc) *qemuOperations {
-	cmd := newQemuCmd()
+	cmd := &qemuCmd{run: defaultRun, stream: defaultRunWithStream}
 	cmd.stream = stream
 	return &qemuOperations{cmd: cmd}
 }

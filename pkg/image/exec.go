@@ -18,8 +18,6 @@ const (
 	qemuImg         = "qemu-img"
 )
 
-// scanLinesWithCR splits on both '\r' and '\n'.
-// This is needed because qemu-img -p outputs progress updates separated by '\r'.
 func scanLinesWithCR(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if atEOF && len(data) == 0 {
 		return 0, nil, nil
@@ -50,44 +48,33 @@ func (e *cmdExecError) Unwrap() error {
 	return e.err
 }
 
-// qemuCmd provides a domain-specific API for executing qemu-img (and other)commands
+// RunFunc executes a command and returns its output.
+type RunFunc func(ctx context.Context, name string, args ...string) ([]byte, error)
+
+// StreamFunc executes a command streaming stdout line by line through callback.
+type StreamFunc func(ctx context.Context, callback func(string), name string, args ...string) error
+
+// Deps holds the injectable dependencies for QEMUOperations.
+type Deps struct {
+	Run    RunFunc
+	Stream StreamFunc
+}
+
+// DefaultDeps returns the production dependencies for QEMUOperations.
+func DefaultDeps() Deps {
+	return Deps{
+		Run:    defaultRun,
+		Stream: defaultRunWithStream,
+	}
+}
+
+// qemuCmd provides a domain-specific API for executing qemu-img (and other) commands.
 type qemuCmd struct {
-	run    func(ctx context.Context, name string, args ...string) ([]byte, error)
-	stream func(ctx context.Context, callback func(string), name string, args ...string) error
+	run    RunFunc
+	stream StreamFunc
 }
 
-func newQemuCmd() *qemuCmd {
-	q := &qemuCmd{}
-	q.run = q.defaultRun
-	q.stream = q.defaultRunWithStream
-	return q
-}
-
-// Exec runs qemu-img with the given args, discarding stdout
-func (q *qemuCmd) Exec(args ...string) error {
-	_, err := q.run(context.Background(), qemuImg, args...)
-	return err
-}
-
-// Info runs qemu-img info with a timeout and returns stdout (for JSON parsing)
-func (q *qemuCmd) Info(timeout time.Duration, url *url.URL) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	return q.run(ctx, qemuImg, "info", "--output=json", url.String())
-}
-
-// ExecWithProgress runs qemu-img streaming stdout through reportProgress
-func (q *qemuCmd) ExecWithProgress(args ...string) error {
-	return q.stream(context.Background(), reportProgress, qemuImg, args...)
-}
-
-// ExecRaw runs an arbitrary command (e.g. dd), discarding stdout
-func (q *qemuCmd) ExecRaw(name string, args ...string) error {
-	_, err := q.run(context.Background(), name, args...)
-	return err
-}
-
-func (q *qemuCmd) defaultRun(ctx context.Context, name string, args ...string) ([]byte, error) {
+func defaultRun(ctx context.Context, name string, args ...string) ([]byte, error) {
 	c := exec.CommandContext(ctx, name, args...)
 	output, err := c.Output()
 	if err != nil {
@@ -101,7 +88,7 @@ func (q *qemuCmd) defaultRun(ctx context.Context, name string, args ...string) (
 	return output, nil
 }
 
-func (q *qemuCmd) defaultRunWithStream(ctx context.Context, callback func(string), name string, args ...string) error {
+func defaultRunWithStream(ctx context.Context, callback func(string), name string, args ...string) error {
 	c := exec.CommandContext(ctx, name, args...)
 
 	var errBuf bytes.Buffer
@@ -134,4 +121,28 @@ func (q *qemuCmd) defaultRunWithStream(ctx context.Context, callback func(string
 		return &cmdExecError{name: name, stderr: errBuf.String(), err: err}
 	}
 	return nil
+}
+
+// Exec runs qemu-img with the given args, discarding stdout.
+func (q *qemuCmd) Exec(args ...string) error {
+	_, err := q.run(context.Background(), qemuImg, args...)
+	return err
+}
+
+// Info runs qemu-img info with a timeout and returns stdout.
+func (q *qemuCmd) Info(timeout time.Duration, url *url.URL) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return q.run(ctx, qemuImg, "info", "--output=json", url.String())
+}
+
+// ExecWithProgress runs qemu-img streaming stdout through reportProgress.
+func (q *qemuCmd) ExecWithProgress(args ...string) error {
+	return q.stream(context.Background(), reportProgress, qemuImg, args...)
+}
+
+// ExecRaw runs an arbitrary command (e.g. dd), discarding stdout.
+func (q *qemuCmd) ExecRaw(name string, args ...string) error {
+	_, err := q.run(context.Background(), name, args...)
+	return err
 }
