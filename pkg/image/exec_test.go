@@ -64,27 +64,27 @@ var _ = Describe("scanLinesWithCR", func() {
 
 var _ = Describe("qemuCmd.run", func() {
 	It("should return stdout on success", func() {
-		q := newQemuCmd()
+		q := &qemuCmd{run: defaultRun, stream: defaultRunWithStream}
 		output, err := q.run(context.Background(), "echo", "hello")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(strings.TrimSpace(string(output))).To(Equal("hello"))
 	})
 
 	It("should return error on command failure", func() {
-		q := newQemuCmd()
+		q := &qemuCmd{run: defaultRun, stream: defaultRunWithStream}
 		_, err := q.run(context.Background(), "false")
 		Expect(err).To(HaveOccurred())
 		Expect(err).To(MatchError(ContainSubstring("execution failed")))
 	})
 
 	It("should return error on non-existent command", func() {
-		q := newQemuCmd()
+		q := &qemuCmd{run: defaultRun, stream: defaultRunWithStream}
 		_, err := q.run(context.Background(), "/usr/bin/nonexistent-command-xyz")
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("should respect context timeout", func() {
-		q := newQemuCmd()
+		q := &qemuCmd{run: defaultRun, stream: defaultRunWithStream}
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 		_, err := q.run(ctx, "sleep", "30")
@@ -92,7 +92,7 @@ var _ = Describe("qemuCmd.run", func() {
 	})
 
 	It("should include stderr in error message", func() {
-		q := newQemuCmd()
+		q := &qemuCmd{run: defaultRun, stream: defaultRunWithStream}
 		_, err := q.run(context.Background(), "sh", "-c", "echo fail_marker >&2; exit 1")
 		Expect(err).To(HaveOccurred())
 		Expect(err).To(MatchError(ContainSubstring("fail_marker")))
@@ -101,7 +101,7 @@ var _ = Describe("qemuCmd.run", func() {
 
 var _ = Describe("qemuCmd.stream", func() {
 	It("should invoke callback for each stdout line", func() {
-		q := newQemuCmd()
+		q := &qemuCmd{run: defaultRun, stream: defaultRunWithStream}
 		var lines []string
 		callback := func(line string) {
 			lines = append(lines, line)
@@ -113,7 +113,7 @@ var _ = Describe("qemuCmd.stream", func() {
 	})
 
 	It("should handle CR-separated progress output", func() {
-		q := newQemuCmd()
+		q := &qemuCmd{run: defaultRun, stream: defaultRunWithStream}
 		var lines []string
 		callback := func(line string) {
 			lines = append(lines, line)
@@ -125,21 +125,21 @@ var _ = Describe("qemuCmd.stream", func() {
 	})
 
 	It("should return error on command failure", func() {
-		q := newQemuCmd()
+		q := &qemuCmd{run: defaultRun, stream: defaultRunWithStream}
 		err := q.stream(context.Background(), nil, "false")
 		Expect(err).To(HaveOccurred())
 		Expect(err).To(MatchError(ContainSubstring("execution failed")))
 	})
 
 	It("should include stderr in error message on failure", func() {
-		q := newQemuCmd()
+		q := &qemuCmd{run: defaultRun, stream: defaultRunWithStream}
 		err := q.stream(context.Background(), nil, "sh", "-c", "echo errout >&2; exit 1")
 		Expect(err).To(HaveOccurred())
 		Expect(err).To(MatchError(ContainSubstring("errout")))
 	})
 
 	It("should respect context timeout", func() {
-		q := newQemuCmd()
+		q := &qemuCmd{run: defaultRun, stream: defaultRunWithStream}
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 		err := q.stream(ctx, nil, "sleep", "30")
@@ -147,7 +147,7 @@ var _ = Describe("qemuCmd.stream", func() {
 	})
 
 	It("should not invoke callback for stderr lines", func() {
-		q := newQemuCmd()
+		q := &qemuCmd{run: defaultRun, stream: defaultRunWithStream}
 		var lines []string
 		callback := func(line string) {
 			lines = append(lines, line)
@@ -159,7 +159,7 @@ var _ = Describe("qemuCmd.stream", func() {
 	})
 
 	It("should split qemu-img style progress output", func() {
-		q := newQemuCmd()
+		q := &qemuCmd{run: defaultRun, stream: defaultRunWithStream}
 		var lines []string
 		callback := func(line string) {
 			lines = append(lines, line)

@@ -68,11 +68,23 @@ type qemuOperations struct {
 	cmd *qemuCmd
 }
 
+// Option configures a QEMUOperations instance
+type Option func(*qemuOperations)
+
+// WithRunFunc overrides the default command execution function
+func WithRunFunc(fn RunFunc) Option {
+	return func(o *qemuOperations) { o.cmd.run = fn }
+}
+
+// WithStreamFunc overrides the default streaming execution function
+func WithStreamFunc(fn StreamFunc) Option {
+	return func(o *qemuOperations) { o.cmd.stream = fn }
+}
+
 var (
 	ErrLargerPVCRequired = errors.New("A larger PVC is required")
 
-	qemuInterface = NewQEMUOperations()
-	re            = regexp.MustCompile(matcherString)
+	re = regexp.MustCompile(matcherString)
 
 	ownerUID                    string
 	convertPreallocationMethods = [][]string{
@@ -95,8 +107,15 @@ func init() {
 }
 
 // NewQEMUOperations returns the default implementation of QEMUOperations
-func NewQEMUOperations() QEMUOperations {
-	return &qemuOperations{cmd: newQemuCmd()}
+// Options can override internal dependencies
+func NewQEMUOperations(opts ...Option) QEMUOperations {
+	o := &qemuOperations{
+		cmd: &qemuCmd{run: defaultRun, stream: defaultRunWithStream},
+	}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return o
 }
 
 func (o *qemuOperations) convertToRaw(src, dest string, preallocate bool, cacheMode string) error {
@@ -200,11 +219,6 @@ func checkOutputQemuImgInfo(output []byte, image string) (*ImgInfo, error) {
 	return &info, nil
 }
 
-// Info returns information about the image from the url
-func Info(url *url.URL) (*ImgInfo, error) {
-	return qemuInterface.Info(url)
-}
-
 func (o *qemuOperations) Info(url *url.URL) (*ImgInfo, error) {
 	if len(url.Scheme) > 0 && url.Scheme != "nbd+unix" && url.Scheme != "file" {
 		return nil, fmt.Errorf("not valid schema %s", url.Scheme)
@@ -256,16 +270,6 @@ func (o *qemuOperations) Validate(url *url.URL, availableSize int64) error {
 	return checkIfURLIsValid(info, availableSize, url.String())
 }
 
-// ConvertToRawStream converts an http accessible image to raw format without locally caching the image
-func ConvertToRawStream(url *url.URL, dest string, preallocate bool, cacheMode string) error {
-	return qemuInterface.ConvertToRawStream(url, dest, preallocate, cacheMode)
-}
-
-// Validate does basic validation of a qemu image
-func Validate(url *url.URL, availableSize int64) error {
-	return qemuInterface.Validate(url, availableSize)
-}
-
 func reportProgress(line string) {
 	// (45.34/100%)
 	matches := re.FindStringSubmatch(line)
@@ -278,12 +282,6 @@ func reportProgress(line string) {
 			metrics.Progress(ownerUID).Add(v - progress)
 		}
 	}
-}
-
-// CreateBlankImage creates empty raw image
-func CreateBlankImage(dest string, size resource.Quantity, preallocate bool) error {
-	klog.V(1).Infof("creating raw image with size %s, preallocation %v", size.String(), preallocate)
-	return qemuInterface.CreateBlankImage(dest, size, preallocate)
 }
 
 // CreateBlankImage creates a raw image with a given size
@@ -325,11 +323,6 @@ func (o *qemuOperations) execPreallocationBlock(dest string, bs, count, offset i
 	}
 
 	return nil
-}
-
-// PreallocateBlankBlock writes requested amount of zeros to block device mounted at dest
-func PreallocateBlankBlock(dest string, size resource.Quantity) error {
-	return qemuInterface.PreallocateBlankBlock(dest, size)
 }
 
 func (o *qemuOperations) PreallocateBlankBlock(dest string, size resource.Quantity) error {
